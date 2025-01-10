@@ -1,0 +1,154 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <unordered_map>
+#include <list>
+#include <algorithm>
+#include <sstream>
+#include<bits/stdc++.h>
+using namespace std;
+// Function to read addresses from the input file
+vector<string> readAddresses(const string &fileName){
+ifstream inputFile(fileName);
+if(!inputFile.is_open()){
+    cerr<<"File not Found"<<endl;
+    exit(1);
+}
+vector<string>addresses;
+string address;
+while(getline(inputFile,address)){
+    if(!address.empty()){
+        addresses.push_back(address);
+    }
+}
+inputFile.close();
+return addresses;
+}
+// LRU Cache Replacement Policy
+int simulateLRU(const vector<string> &addresses, int cacheSize, vector<string> &resultLog) {
+    unordered_map<string, list<string>::iterator> cacheMap;
+    list<string> cache;
+    int totalMisses = 0;
+
+    for (const string &address : addresses) {
+        if (cacheMap.find(address) == cacheMap.end()) {
+            // Cache miss
+            totalMisses++;
+            resultLog.push_back("MISS");
+            if (cache.size() == cacheSize) {
+                // Evict least recently used
+                string lru = cache.back();
+                cache.pop_back();
+                cacheMap.erase(lru);
+            }
+        } else {
+            // Cache hit
+            resultLog.push_back("HIT");
+            cache.erase(cacheMap[address]);
+        }
+        // Insert the current address at the front
+        cache.push_front(address);
+        cacheMap[address] = cache.begin();
+    }
+    return totalMisses;
+}
+
+// Optimal Cache Replacement Policy
+int simulateOptimal(const vector<string> &addresses, int cachesize, vector<string> &logResults) {
+    int n = (int)addresses.size();
+	int misses=0;
+    map<string, int>lastIndexMapping;
+	multiset<pair<int, string>, greater<pair<int, string>>>ind_ind_pair;
+	multiset<string>valueStored;
+	vector<int>indexesPos(n + 1, 0);
+	for (int i = n - 1; i >= 0; i--) {
+		if (!lastIndexMapping.count(addresses[i]))
+			indexesPos[i] = INT_MAX;
+		else
+			indexesPos[i] = lastIndexMapping[addresses[i]];
+		lastIndexMapping[addresses[i]] = i;
+	}
+	for (int i = 0; i < n; i++) {
+		string keyValue = addresses[i];
+		if (valueStored.find(keyValue) != valueStored.end()) {
+			logResults.push_back("HIT");
+			ind_ind_pair.erase(ind_ind_pair.find({i, keyValue}));
+			ind_ind_pair.insert({indexesPos[i], keyValue});
+		}
+		else {
+            misses++;
+			logResults.push_back("MISS");
+			if (valueStored.size() < cachesize) {
+				ind_ind_pair.insert({indexesPos[i], keyValue});
+				valueStored.insert(addresses[i]);
+			}
+			else {
+				auto itr = ind_ind_pair.begin();
+				pair<int, string>eTD = *itr;
+				ind_ind_pair.erase(itr);
+				valueStored.erase(valueStored.find(eTD.second));
+				valueStored.insert(keyValue);
+				ind_ind_pair.insert({indexesPos[i], keyValue});
+			}
+		}
+	}
+    return misses;
+}
+
+// Write output to the file
+void writeOutput(const string &filename, const string &policy, int totalAccesses, int totalMisses, int compulsoryMisses,
+                 int capacityMisses, const vector<string> &resultLog) {
+    ofstream outputFile(filename);
+    if (!outputFile.is_open()) {
+        cerr << "Error: Unable to write to file " << filename << endl;
+        exit(1);
+    }
+
+    outputFile << "TOTAL_ACCESSES = " << totalAccesses << endl;
+    outputFile << "TOTAL_MISSES = " << totalMisses << endl;
+    outputFile << "COMPULSORY_MISSES = " << compulsoryMisses << endl;
+    outputFile << "CAPACITY_MISSES = " << capacityMisses << endl;
+
+    for (const string &result : resultLog) {
+        outputFile << result << endl;
+    }
+    outputFile.close();
+}
+
+// Main function
+int main(int argc, char *argv[]) {
+    if (argc != 4) {
+        cerr << "Usage: " << argv[0] << " <LRU/OPTIMAL> <AddressSequenceFile.txt> <NumberOfCacheEntries>" << endl;
+        return 1;
+    }
+    string policy = argv[1];
+    string addressFile = argv[2];
+    int cacheSize = stoi(argv[3]);
+    vector<string> addresses = readAddresses(addressFile);
+    vector<string> resultLog;
+    int totalMisses = 0;
+    if (policy == "LRU") {
+        totalMisses = simulateLRU(addresses, cacheSize, resultLog);
+    } else if (policy == "OPTIMAL") {
+        totalMisses = simulateOptimal(addresses, cacheSize, resultLog);
+    } else {
+        cerr << "Error: Invalid policy. Use LRU or OPTIMAL." << endl;
+        return 1;
+    }
+    int compulsoryMisses = 0;
+    unordered_map<string, bool> seen;
+    for (const string &address : addresses) {
+        if (seen.find(address) == seen.end()) {
+            compulsoryMisses++;
+            seen[address] = true;
+        }
+    }
+    int capacityMisses = totalMisses - compulsoryMisses;
+
+    string outputFilename = "21116004_" + policy + "" + addressFile + "" + to_string(cacheSize) + ".out";
+    writeOutput(outputFilename, policy, addresses.size(), totalMisses, compulsoryMisses, capacityMisses, resultLog);
+
+    cout << "Results written to " << outputFilename << endl;
+
+    return 0;
+}
